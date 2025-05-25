@@ -79,6 +79,21 @@ if st.button("Tahmin Yap", key="predict_button"):
     # One-hot encoding uygulama (eğitimdeki gibi)
     # Kategorik sütunları belirleyelim (input_options'tan yararlanabiliriz)
     categorical_to_encode = [col for col, opt in input_options.items() if isinstance(opt, list)]
+
+    # --- YENİ EKLENEN BÖLÜM BAŞLANGICI ---
+    # Kategorik sütunların veri tipini, eğitimdeki tüm kategorileri içerecek şekilde ayarla
+    for col_name in categorical_to_encode:
+        if col_name in input_df_original_features.columns:
+            all_categories_for_col = input_options[col_name] # input_options'dan kategorileri al
+            try:
+                input_df_original_features[col_name] = pd.Categorical(
+                    input_df_original_features[col_name],
+                    categories=all_categories_for_col
+                )
+            except ValueError as ve:
+                st.error(f"'{col_name}' sütunu için kategori ayarlarken hata: {ve}. Sağlanan değer: {input_df_original_features[col_name].iloc[0]}, Beklenen kategoriler: {all_categories_for_col}")
+                st.stop() # Hata durumunda devam etme
+    # --- YENİ EKLENEN BÖLÜM SONU ---
     
     try:
         input_df_processed = pd.get_dummies(input_df_original_features.copy(), columns=categorical_to_encode, drop_first=True)
@@ -112,6 +127,24 @@ if st.button("Tahmin Yap", key="predict_button"):
 
     # Sütunların sırasının modelin beklediği gibi olduğundan emin olalım (gerçi pipeline bunu halletmeli)
     final_input_df = final_input_df[selected_features_list]
+
+    missing_in_processed_but_selected = [] # Hangi özelliklerin input_df_processed'de olmadığı ama selected_features_list'te olduğu
+
+    for feature in selected_features_list:
+        if feature in input_df_processed.columns:
+            final_input_df[feature] = input_df_processed[feature]
+        else:
+            final_input_df[feature] = 0 
+            # Bu uyarı hala görünebilir EĞER kullanıcı, seçilen özellik listesindeki
+            # bir one-hot encoded değere karşılık GELMEYEN bir kategori seçtiyse.
+            # Örneğin, selected_features_list'te 'month_mar' var ama kullanıcı 'month_jan' seçti.
+            # Bu durumda 'month_mar' girdide bulunamaz ve 0 olması doğrudur.
+            # Önemli olan, kullanıcının seçtiği değere karşılık gelen one-hot encoded sütunun
+            # (örn: 'month_jan') input_df_processed'te oluşması ve final_input_df'e aktarılmasıdır.
+            missing_in_processed_but_selected.append(feature) # Sadece listeye ekle, uyarıyı sonda verelim
+
+    if missing_in_processed_but_selected:
+        st.warning(f"Aşağıdaki önemli özellikler, girdilerinizden doğrudan oluşturulamadı ve model için 0 olarak ayarlandı (bu, farklı bir kategori seçmenizden veya one-hot encoding yapısından kaynaklanabilir): {', '.join(missing_in_processed_but_selected)}")
 
     # Tahmin yapma
     try:
